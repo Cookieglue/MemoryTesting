@@ -1,13 +1,30 @@
 
-#define CLK 5
-#define RAM_IN 2
-#define RAM_OUT 3
-#define MAD_IN 4
+#define CLK 2 //inverted
+#define RAM_IN 3
+#define RAM_OUT 4 //inverted
+#define MAD_IN 13
 
-#define START_PIN 9
-//bits go left to right
+#define START_PIN 5
+//bits go left to right (5 to 12)
 
-bool memory[16][8];
+bool memory[16][8] ={
+  {0,1,0,1, 0,0,0,1}, //LDI 1
+  {0,1,0,0, 1,1,1,0}, //STA Y
+  {0,1,0,1, 0,0,0,0}, //LDI 0
+  {1,1,1,0, 0,0,0,0}, //OUT
+  {0,0,1,0, 1,1,1,0}, //ADD Y
+  {0,1,0,0, 1,1,1,1}, //STA Z 
+  {0,0,0,1, 1,1,1,0}, //LDA Y //cache new y into old y
+  {0,1,0,0, 1,1,0,1}, //STA X
+  {0,0,0,1, 1,1,1,1}, //LDA Z
+  {0,1,0,0, 1,1,1,0}, //STA Y
+  {0,0,0,1, 1,1,0,1}, //LDA X
+  {0,1,1,1, 0,0,0,0}, //JC 0
+  {0,1,1,0, 0,0,1,1}, //JMP 3
+  {0,0,0,0, 0,0,0,0}, //X
+  {0,0,0,0, 0,0,0,0}, //Y
+  {0,0,0,0, 0,0,0,0}  //Z
+};
 int pointer = 0;
 bool strClk = 0;
 int deltaClk = 0;
@@ -25,17 +42,38 @@ void setup() {
     for (int i = 0 ; i < 8 ; i++){
       pinMode(START_PIN + i , INPUT);
     }
+
+    Serial.begin(9600);
     
 }
 
 void loop() {
 
-  //1 means rising edge, -1 means falling edge
-  deltaClk = CLK-strClk;
-  strClk = CLK;
+  //read and invert pins
+  bool clock = 1-digitalRead(CLK);
+  bool ramOut = 1-digitalRead(RAM_OUT);
+  bool ramIn = digitalRead(RAM_IN);
+  bool madIn = 1-digitalRead(MAD_IN);
 
+  if (millis()%2000 == 0){
+    Serial.println(millis()/2000);
+    Serial.print("Clock: ");
+    Serial.println(clock);
+    Serial.print("RAM OUT: ");
+    Serial.println(ramOut);
+    Serial.print("RAM IN: ");
+    Serial.println(ramIn);
+    Serial.print("MAD IN: ");
+    Serial.println(madIn);
+    Serial.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+  }
+  //1 means rising edge, -1 means falling edge
+  deltaClk = clock-strClk;
+  strClk = clock;
+
+  
   //mad in and ram out creates a special case
-  if(RAM_OUT && !MAD_IN){
+  if(ramOut && !madIn){
     //allow outputting to the bus
     for (int i = 0 ; i < 8 ; i++){
       pinMode(START_PIN + i , OUTPUT);
@@ -57,9 +95,9 @@ void loop() {
   
 
   //set mad in on falling edge
-  if(MAD_IN && deltaClk == -1){
+  if(madIn && deltaClk == -1){
     //loading from itself
-    if(RAM_OUT){
+    if(ramOut){
       int buffer;
       for (int i = busSplit ; i < 8 ; i++){
         //shift bits and add new bit from array
